@@ -1,0 +1,124 @@
+# Aegis on Kubernetes.
+#   kubectl apply -f deploy/k8s/aegis.yaml
+# Works on kind/minikube locally and on EKS/GKE/AKS.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis
+---
+# Demo only. In production use External Secrets / AWS Secrets Manager / Vault.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aegis-passphrase
+  namespace: aegis
+type: Opaque
+stringData:
+  AEGIS_PASSPHRASE: change-me-to-a-long-random-passphrase
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aegis-repo
+  namespace: aegis
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+# The data being protected. In a real cluster this would be an application's
+# existing volume, mounted read-only into Aegis.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: protected-data
+  namespace: aegis
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis
+  namespace: aegis
+  labels: {app: aegis}
+spec:
+  replicas: 1 # single writer per repo in v1; see roadmap for leader election
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: aegis}
+  template:
+    metadata:
+      labels: {app: aegis}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # Idempotent: fails harmlessly with "already initialised".
+        - name: init-repo
+          image: aegis:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/aegis"]
+          args: ["init", "--repo", "/repo"]
+          envFrom: [{secretRef: {name: aegis-passphrase}}]
+          volumeMounts: [{name: repo, mountPath: /repo}]
+      containers:
+        - name: aegis
+          image: aegis:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8080, name: http}]
+          envFrom: [{secretRef: {name: aegis-passphrase}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+          volumeMounts:
+            - {name: repo, mountPath: /repo}
+            - {name: data, mountPath: /data, readOnly: true}
+      volumes:
+        - name: repo
+          persistentVolumeClaim: {claimName: aegis-repo}
+        - name: data
+          persistentVolumeClaim: {claimName: protected-data, readOnly: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis
+  namespace: aegis
+spec:
+  selector: {app: aegis}
+  ports: [{port: 80, targetPort: http, name: http}]
+---
+# Hourly backup policy (the SLA): triggers the service's backup endpoint.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aegis-hourly-backup
+  namespace: aegis
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.10.1
+              args: ["-fsS", "-X", "POST", "http://aegis.aegis.svc.cluster.local/api/v1/backups"]

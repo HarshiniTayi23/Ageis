@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sriharshini/aegis/internal/store"
+	"github.com/HarshiniTayi23/Ageis/internal/store"
 )
 
 const pass = "correct horse battery staple"

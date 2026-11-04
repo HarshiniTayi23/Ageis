@@ -1,22 +1,55 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  check:
+    name: lint + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: {go-version: "1.24"}
+        with:
+          go-version-file: go.mod
       - name: gofmt
-        run: test -z "$(gofmt -l .)"
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
-      - name: test (race detector on)
-        run: go test -race -count=1 ./...
-      - name: end-to-end attack/recovery demo
-        run: ./scripts/demo.sh
-  docker:
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+      - name: test (race detector)
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  demo:
+    name: end-to-end demo
     runs-on: ubuntu-latest
-    needs: test
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: ./scripts/demo.sh
+
+  stack:
+    name: docker image + local stack
+    runs-on: ubuntu-latest
+    needs: check
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t aegis:ci .
+      - name: start MinIO with Object Lock and verify a locked object cannot be deleted
+        run: |
+          cp .env.example .env
+          docker compose -f deploy/compose/compose.yaml --env-file .env up -d --wait minio
+          docker compose -f deploy/compose/compose.yaml --env-file .env run --rm minio-init
+          ./scripts/check-object-lock.sh
+      - if: always()
+        run: docker compose -f deploy/compose/compose.yaml --env-file .env down -v

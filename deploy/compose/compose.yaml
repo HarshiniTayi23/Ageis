@@ -1,0 +1,67 @@
+# Local development stack.
+#   make up     start everything
+#   make down   stop (data kept in named volumes)
+#   make nuke   stop and delete all data
+#
+# Services:
+#   minio       S3-compatible object storage with Object Lock: the vault backend.
+#               Console: http://localhost:9001
+#   minio-init  one-shot: creates the vault bucket WITH object lock and a
+#               default COMPLIANCE retention, so nothing written can be deleted
+#               early, not even by the MinIO admin.
+#   postgres    sample "company database" that AI agents will act on in
+#               Milestone 2 (agent action journal + rollback).
+name: aegis
+
+services:
+  minio:
+    # MinIO stopped publishing new community images in late 2025; this tag is
+    # a pinned release from before that. Verify it pulls on first `make up`.
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    env_file: ../../.env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z # ships with the mc client
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file: ../../.env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        # Object lock can only be enabled when a bucket is CREATED.
+        mc mb --ignore-existing --with-lock "local/$$AEGIS_BUCKET"
+        mc retention set --default COMPLIANCE "$$AEGIS_RETENTION" "local/$$AEGIS_BUCKET"
+        mc retention info --default "local/$$AEGIS_BUCKET"
+        echo "vault bucket ready"
+    restart: "no"
+
+  postgres:
+    image: postgres:16.4-alpine
+    env_file: ../../.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  minio-data:
+  pg-data:

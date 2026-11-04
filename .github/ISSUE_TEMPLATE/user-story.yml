@@ -1,0 +1,43 @@
+name: User story
+description: A feature, written from the user's point of view
+labels: ["story"]
+body:
+  - type: dropdown
+    id: persona
+    attributes:
+      label: Persona
+      description: Who is this for? Personas are defined in docs/pm/02-personas.md
+      options:
+        - Backup / IT admin (on call during an incident)
+        - CISO / security leader (pay-or-restore decision)
+        - AI platform owner (runs AI agents against company data)
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      description: "As a <persona>, I want <capability>, so that <outcome>."
+      placeholder: As a backup admin, I want the system to tell me the last clean recovery point, so that I can restore in minutes instead of searching for days.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable conditions. If you can't test it, it isn't done.
+      placeholder: |
+        - Given an infected snapshot, `aegis restore --latest-clean` picks the snapshot before it
+        - Every restored file's SHA-256 matches the original
+    validations:
+      required: true
+  - type: textarea
+    id: metric
+    attributes:
+      label: Success metric
+      description: Which metric in the PRD does this move, and by how much?
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (MoSCoW)
+      options: [Must, Should, Could, "Won't (this milestone)"]

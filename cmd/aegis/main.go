@@ -25,9 +25,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sriharshini/aegis/internal/repo"
-	"github.com/sriharshini/aegis/internal/server"
-	"github.com/sriharshini/aegis/internal/store"
+	"github.com/HarshiniTayi23/Ageis/internal/repo"
+	"github.com/HarshiniTayi23/Ageis/internal/server"
+	"github.com/HarshiniTayi23/Ageis/internal/store"
 )
 
 func main() {
@@ -57,7 +57,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 	addr := fs.String("addr", ":8080", "listen address (serve)")
 	source := fs.String("source", "", "directory to protect (serve)")
 	asJSON := fs.Bool("json", false, "JSON output")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse never returns an error
 
 	pass := os.Getenv("AEGIS_PASSPHRASE")
 	if pass == "" {
@@ -111,13 +111,13 @@ func run(ctx context.Context, cmd string, args []string) error {
 			return printJSON(all)
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "ID\tTIME\tFILES\tSIZE\tUPLOADED\tSCORE\tSTATUS")
+		_, _ = fmt.Fprintln(tw, "ID\tTIME\tFILES\tSIZE\tUPLOADED\tSCORE\tSTATUS")
 		for _, s := range all {
 			status := "clean"
 			if s.Verdict.Suspicious {
 				status = "SUSPICIOUS"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\t%.2f\t%s\n", s.ID, s.Time.Format(time.RFC3339),
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\t%.2f\t%s\n", s.ID, s.Time.Format(time.RFC3339),
 				s.Stats.Files, human(s.Stats.Bytes), human(s.Stats.NewBytes), s.Verdict.Score, status)
 		}
 		return tw.Flush()
@@ -172,7 +172,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 			<-ctx.Done()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			srv.Shutdown(shutdownCtx) // graceful: let in-flight backup finish
+			_ = srv.Shutdown(shutdownCtx) // graceful: let in-flight backup finish
 		}()
 		log.Info("aegis listening", "addr", *addr, "source", *source)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {

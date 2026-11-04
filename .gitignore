@@ -1,3 +1,11 @@
+# build output
+/bin/
 /aegis
+# local data and secrets
+.env
 /aegis-repo/
 *.aegis-partial
+# editors / OS
+.idea/
+.vscode/
+.DS_Store

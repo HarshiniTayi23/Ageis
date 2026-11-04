@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sriharshini/aegis/internal/repo"
+	"github.com/HarshiniTayi23/Ageis/internal/repo"
 )
 
 type Server struct {
@@ -35,7 +35,7 @@ func New(r *repo.Repo, source string, log *slog.Logger) *Server {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("GET /api/v1/snapshots", s.list)
 	mux.HandleFunc("GET /api/v1/snapshots/{id}", s.get)
@@ -68,7 +68,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	w.Write([]byte("ready"))
+	_, _ = w.Write([]byte("ready"))
 }
 
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +149,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(v)
+	_ = enc.Encode(v) // headers already sent; nothing useful to do on error
 }
 
 func writeErr(w http.ResponseWriter, code int, err error) {

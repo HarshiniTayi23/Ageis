@@ -33,10 +33,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sriharshini/aegis/internal/chunker"
-	"github.com/sriharshini/aegis/internal/detect"
-	"github.com/sriharshini/aegis/internal/seal"
-	"github.com/sriharshini/aegis/internal/store"
+	"github.com/HarshiniTayi23/Ageis/internal/chunker"
+	"github.com/HarshiniTayi23/Ageis/internal/detect"
+	"github.com/HarshiniTayi23/Ageis/internal/seal"
+	"github.com/HarshiniTayi23/Ageis/internal/store"
 )
 
 const formatVersion = 1
@@ -283,7 +283,7 @@ func (r *Repo) backupFile(ctx context.Context, p, rel string, jobs chan<- upload
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only: close error is not actionable
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func (r *Repo) backupFile(ctx context.Context, p, rel string, jobs chan<- upload
 			return nil, ctx.Err()
 		}
 	}
-	fe.Size = int64(total)
+	fe.Size = int64(total) //nolint:gosec // G115: a file cannot exceed 2^63 bytes
 	fe.SHA256 = hex.EncodeToString(h.Sum(nil))
 	fe.Entropy = detect.Entropy(&hist, total)
 	return fe, nil
@@ -484,7 +484,7 @@ func (r *Repo) Restore(ctx context.Context, id, dst string) error {
 }
 
 func (r *Repo) restoreFile(ctx context.Context, fe FileEntry, target string) error {
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		return err
 	}
 	tmp := target + ".aegis-partial"
@@ -497,13 +497,13 @@ func (r *Repo) restoreFile(ctx context.Context, fe FileEntry, target string) err
 	for _, id := range fe.Chunks {
 		data, err := r.readChunk(ctx, id)
 		if err != nil {
-			f.Close()
-			os.Remove(tmp)
+			_ = f.Close()
+			_ = os.Remove(tmp) // best-effort cleanup
 			return err
 		}
 		if _, err := w.Write(data); err != nil {
-			f.Close()
-			os.Remove(tmp)
+			_ = f.Close()
+			_ = os.Remove(tmp)
 			return err
 		}
 	}
@@ -511,7 +511,7 @@ func (r *Repo) restoreFile(ctx context.Context, fe FileEntry, target string) err
 		return err
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != fe.SHA256 {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return fmt.Errorf("integrity check failed: sha256 %s != %s", got, fe.SHA256)
 	}
 	if err := os.Chmod(tmp, fe.Mode); err != nil {

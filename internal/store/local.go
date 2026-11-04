@@ -28,7 +28,7 @@ type LocalWORM struct {
 
 // NewLocalWORM creates the store rooted at dir.
 func NewLocalWORM(dir string, retention time.Duration) (*LocalWORM, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
 	return &LocalWORM{root: dir, retention: retention, now: time.Now}, nil
@@ -52,7 +52,7 @@ func (s *LocalWORM) Put(ctx context.Context, key string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".tmp-*")
@@ -60,19 +60,21 @@ func (s *LocalWORM) Put(ctx context.Context, key string, data []byte) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }() // temp file; the hard link keeps the data
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, 0o444); err != nil {
+	// World-readable read-only is intended: contents are encrypted.
+	if err := os.Chmod(tmpName, 0o444); err != nil { //nolint:gosec // G302
+
 		return err
 	}
 	if err := os.Link(tmpName, p); err != nil {

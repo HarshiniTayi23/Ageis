@@ -1,6 +1,35 @@
 # Build log
 
-A running record of what was built, what was decided, what broke, and what's still open. Newest entries at the bottom. Each entry ends with **For review**: decisions you may want to overturn.
+A running record of what was built, what was decided, what broke, and what's still open. Each entry ends with **For review**: decisions you may want to overturn.
+
+## Read this first: state as of 2026-11-12
+
+**Scorecard**
+
+| Area | State | Evidence |
+|---|---|---|
+| M1 Ransomware vault | ✅ Done (except demo video) | CI: tests, demo, real MinIO Object Lock, kind cluster |
+| M2 Agent undo | ✅ Done (files; Postgres is M2.5) | CI: PocketOS replay demo |
+| M3 Detector evaluation | ✅ Done, with honest numbers | 87% recall tuning / **68% held-out**, 0% false alarms; CI-gated |
+| M3 Metrics | ✅ Done | `/metrics` checked on the kind cluster in CI |
+| M3 Raft catalog | ⬜ Blocked here | Dependencies unreachable from this environment (see last entry) |
+| M3 History-based detector | ⬜ Designed, not built | Design in last entry |
+| M3 LLM copilot | ⬜ Planned | Evaluation plan written first (`docs/pm/07`) |
+| PM docs | Problem, personas v0.2, PRD M1 + M2, roadmap v0.2 (RICE), competitive analysis, AI eval plan | `docs/pm/` |
+| Decisions | ADR-0001 to 0007 | `docs/adr/` |
+
+**Only you can do these**
+1. **Read `docs/pm/06-competitive-analysis.md` before any interview.** Rubrik already ships Agent Rewind and an MCP gateway. Aegis is positioned as a from-scratch implementation of those problems, not a new idea.
+2. **User interviews** (`docs/pm/03`): two conversations would turn assumptions H1–H3 into evidence.
+3. **Demo video** (2 minutes): `make demo`, then `make demo-agent`.
+4. **Project board:** `gh auth login && ./scripts/bootstrap-github.sh`. Note: some seeded issues are now done; close them as you review.
+5. **Re-score the RICE table yourself.** The fastest way to own the roadmap.
+
+**What I'd challenge if I were interviewing you**
+- "Why write your own S3 client?" → ADR-0006.
+- "Why is held-out recall lower, and which number do you quote?" → `docs/eval`.
+- "How does undo avoid destroying a human's work?" → ADR-0007, `agentfs.Undo`.
+- "What does your system *not* protect against?" → README, Known limitations.
 
 ---
 
@@ -127,3 +156,31 @@ The roadmap put Raft first in M3 for strategic reasons. But the PRD's recall tar
 **For review**
 - This is your best AI-PM interview story: *"My tests said ~100%. My evaluation said 38%. My first fix broke the false-alarm budget. Here's how I chose between recall and precision, and why the held-out number is the one I quote."*
 - The PRD target of 95% recall is **not met** (68% held-out). Do you lower the target, or keep it and plan the history-based detector? I kept it. A PM shouldn't move the goalposts to declare victory.
+
+---
+
+## 2026-11-12 · Session 1 (end): metrics, and what's blocked
+
+### Prometheus metrics
+- `GET /metrics` in the standard text format, with no client library.
+- **Metrics:** backups by result, bytes covered vs uploaded (the dedup ratio), suspicious-snapshot count, last anomaly score, a backup-duration histogram, last drill time and result, and HTTP requests.
+- Route labels use the *matched pattern* (`/api/v1/snapshots/{id}`), never the raw path, so snapshot IDs can't explode label cardinality. There's a test for this.
+- New `POST /api/v1/drills` endpoint, so the drill can run on a schedule in the cluster like the backup CronJob.
+- The kind CI job now checks that `/metrics` reports the CronJob's backup.
+
+### Blocked: Raft catalog
+- `hashicorp/raft` needs `golang.org/x/sys`, and `golang.org` is blocked from this build environment, along with the Go module mirror. CI on GitHub could fetch it, but I can't build or test locally, and I won't push code I can't run.
+- **Options for next session (your call):**
+  - (a) Run this step on your laptop, where the module mirror works, with `hashicorp/raft`. Fastest and most realistic.
+  - (b) Implement Raft from the paper (leader election + log replication) with a simulated network and partition tests, in the style of MIT 6.824. Much more work, but a strong interview story.
+  - (c) Use a local `go.work` replace to a GitHub mirror of `golang.org/x/sys`. Works, but is brittle.
+- My recommendation: **(a) if you can run it locally, otherwise (b)**.
+
+### Designed, not built: history-based detector (slow encryption)
+- **Problem:** encrypting 10% per backup never trips a single-snapshot comparison. Worse, each missed snapshot becomes the next "clean" baseline, so the attack ratchets forward unseen.
+- **Design:** also score each snapshot against the clean snapshot *K backups ago*, and take the higher score. When the long-window comparison fires, the snapshots in between are also suspect. Because the vault is write-once, that's recorded as a **retroactive verdict event** (event sourcing again), and `--latest-clean` honours it, so recovery goes back to before the drift started.
+- **To validate:** add multi-step scenarios to `aegis-eval` (10% per step for 6 steps), and measure both detection delay and whether the chosen recovery point is truly clean.
+
+**For review**
+- Raft: (a) or (b)? This choice decides the next session.
+- Is a retroactive verdict (changing which snapshot counts as clean after the fact) something Ravi would trust, or would it confuse him at 3 a.m.? That's a UX question worth an interview question.

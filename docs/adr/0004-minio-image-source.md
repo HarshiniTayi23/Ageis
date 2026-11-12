@@ -1,6 +1,6 @@
 # ADR-0004: Pull MinIO from Quay after its removal from Docker Hub
 
-**Status:** Accepted · **Date:** 2026-11-12 · Follows up on [ADR-0003](0003-go-and-minio-object-lock.md)
+**Status:** Accepted · **Date:** 2026-11-12 · Follows up on [ADR-0003](0003-go-and-minio-object-lock.md) · Superseded by [ADR-0005](0005-chainguard-minio-and-aws-cli.md)
 
 ## Context
 The first CI run failed with `pull access denied for minio/minio`. Around 12 September 2026 Docker Hub stopped serving the `minio/minio` and `minio/mc` repositories. This came at the end of a longer change upstream: MinIO Community Edition went source-only in late 2025, and the repository was archived in April 2026.

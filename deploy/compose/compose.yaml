@@ -15,37 +15,39 @@ name: aegis
 
 services:
   minio:
-    # Docker Hub stopped serving minio/* in Sept 2026 (upstream archived in
-    # April 2026). Historical releases remain on Quay. See ADR-0004.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
+    # MinIO's own images are no longer pullable from Docker Hub or Quay (2026).
+    # Chainguard rebuilds MinIO from source and keeps it patched. See ADR-0005.
+    image: cgr.dev/chainguard/minio:latest
+    user: "0:0" # write access to the named volume
+    command: ["server", "/data", "--console-address", ":9001"]
     env_file: ../../.env
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
   minio-init:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z # ships with the mc client
-    depends_on:
-      minio:
-        condition: service_healthy
+    # Uses the AWS CLI, the same S3 API Aegis will use against AWS itself.
+    image: amazon/aws-cli:2.17.0
+    depends_on: [minio]
     env_file: ../../.env
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
-        # Object lock can only be enabled when a bucket is CREATED.
-        mc mb --ignore-existing --with-lock "local/$$AEGIS_BUCKET"
-        mc retention set --default COMPLIANCE "$$AEGIS_RETENTION" "local/$$AEGIS_BUCKET"
-        mc retention info --default "local/$$AEGIS_BUCKET"
+        s3() { aws --endpoint-url http://minio:9000 s3api "$$@"; }
+        for i in $$(seq 1 60); do s3 list-buckets >/dev/null 2>&1 && break; sleep 1; done
+        # Object Lock can only be enabled when a bucket is CREATED.
+        s3 head-bucket --bucket "$$AEGIS_BUCKET" 2>/dev/null ||
+          s3 create-bucket --bucket "$$AEGIS_BUCKET" --object-lock-enabled-for-bucket
+        s3 put-object-lock-configuration --bucket "$$AEGIS_BUCKET" --object-lock-configuration \
+          "{\"ObjectLockEnabled\":\"Enabled\",\"Rule\":{\"DefaultRetention\":{\"Mode\":\"COMPLIANCE\",\"Days\":$$AEGIS_RETENTION_DAYS}}}"
+        s3 get-object-lock-configuration --bucket "$$AEGIS_BUCKET"
         echo "vault bucket ready"
     restart: "no"
 

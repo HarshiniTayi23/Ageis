@@ -1,6 +1,6 @@
 # ADR-0003: Go for the service, MinIO with Object Lock for local immutable storage
 
-**Status:** Accepted · **Date:** 2026-11-04 · Image source superseded by [ADR-0004](0004-minio-image-source.md)
+**Status:** Accepted · **Date:** 2026-11-04 · Image source superseded by [ADR-0004](0004-minio-image-source.md), then [ADR-0005](0005-chainguard-minio-and-aws-cli.md)
 
 ## Context
 We need a language suited to concurrent I/O-heavy services, and a local storage backend that is *actually* immutable. The current local-disk store can be overwritten by root, which the demo shows openly.

@@ -16,7 +16,7 @@ We need a language suited to concurrent I/O-heavy services, and a local storage 
 | Python | Fastest to write | Weak at CPU-bound concurrency (GIL); harder to ship as a small static image |
 | Rust | Strongest safety and speed | Slowest to learn in a short timeline |
 | Local disk only | No dependencies | Root can delete anything, so it isn't real immutability |
-| **MinIO + Object Lock** | Free, runs in Docker, same S3 API as AWS, COMPLIANCE mode refuses deletes even for root | Community edition no longer gets new Docker images (late 2025), so we pin a release |
+| **MinIO + Object Lock** | Free, runs in Docker, same S3 API as AWS, COMPLIANCE mode refuses deletes even for root | Upstream archived and Docker Hub images withdrawn in 2026; see ADR-0004 |
 | LocalStack | Emulates many AWS services | Object Lock enforcement is weaker than MinIO's |
 
 ## Consequences

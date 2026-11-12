@@ -11,7 +11,10 @@ What to understand, milestone by milestone, well enough to explain in an intervi
 - [ ] **Docker**: images, layers, multi-stage builds, why distroless.
 
 ## M2 · Agent undo
-- [ ] **How AI agents call tools**: the Model Context Protocol (MCP).
+- [ ] **How AI agents call tools**: the Model Context Protocol (MCP). Read `internal/mcp/mcp.go` (about 150 lines), then run `make demo-agent` and look at the JSON lines it sends.
+- [ ] **Event sourcing**: why the journal never updates anything, and how "pending" is derived by replay (`internal/journal`, ADR-0007).
+- [ ] **Optimistic concurrency**: undo only reverts if the file's hash still matches what the agent left (`agentfs.Undo`).
+- [ ] **AWS Signature V4**: read `internal/store/sigv4.go` against AWS's examples in `sigv4_test.go`.
 - [ ] **Change data capture**: Postgres write-ahead log and logical replication.
 - [ ] **Identity**: how an agent's credentials differ from a human's, and least privilege.
 

@@ -47,6 +47,10 @@ check: ## Everything CI runs: format check, vet, lint, tests
 demo: ## Run the ransomware attack -> detect -> recover demo
 	./scripts/demo.sh
 
+.PHONY: demo-agent
+demo-agent: ## Run the rogue AI agent -> contain -> undo demo (PocketOS replay)
+	./scripts/demo-agent.sh
+
 .PHONY: up
 up: .env ## Start local stack (MinIO with Object Lock, Postgres)
 	$(COMPOSE) up -d

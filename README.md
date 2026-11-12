@@ -4,7 +4,7 @@
 
 [![ci](https://github.com/HarshiniTayi23/Ageis/actions/workflows/ci.yml/badge.svg)](https://github.com/HarshiniTayi23/Ageis/actions/workflows/ci.yml)
 
-> **Status:** Milestone 1 of 3 in progress. The ransomware-vault core works and is tested. Agent undo and the distributed/AI layer are designed and on the [roadmap](docs/pm/05-roadmap.md).
+> **Status:** Milestones 1 (ransomware vault) and 2 (agent undo) are built and tested in CI, including against real S3 Object Lock and a live Kubernetes cluster. Milestone 3 (distributed catalog, ML detector, LLM copilot) is next. See the [roadmap](docs/pm/05-roadmap.md) and the [build log](docs/BUILD_LOG.md).
 
 ---
 
@@ -21,7 +21,7 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 ```
   scheduled backups (servers, files)  ─┐
                                        ├─► immutable vault ─► anomaly detector ─► recovery API
-  AI agent action journal (DB, files) ─┘   (S3 Object Lock)     (rules → ML)      "restore clean" /
+  AI agent action journal (files)     ─┘   (S3 Object Lock)     (rules → ML)      "restore clean" /
                                                                                   "undo agent X"
 ```
 
@@ -32,9 +32,12 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 | Hash-chained, tamper-evident snapshot history | ✅ M1 |
 | Ransomware detector (entropy jumps, rename storms, ransom notes) | ✅ M1 |
 | `restore --latest-clean` with per-file SHA-256 verification | ✅ M1 |
-| HTTP API, container image, Kubernetes manifests | ✅ M1 (k8s untested on a live cluster) |
-| S3 backend with Object Lock (COMPLIANCE mode) | ⬜ M1 |
-| AI-agent action journal + selective undo | ⬜ M2 |
+| HTTP API, container image, Kubernetes manifests (deployed to kind in CI) | ✅ M1 |
+| S3 backend with Object Lock (COMPLIANCE mode); stdlib SigV4 client | ✅ M1 |
+| `aegis drill`: verified test restore with a sealed audit report | ✅ M1 |
+| MCP tool server for AI agents: every write journalled in the vault | ✅ M2 |
+| Deletes held for human approval; undo one agent, keep human edits | ✅ M2 |
+| Postgres change capture for agents | ⬜ M2.5 |
 | 3-node Raft catalog | ⬜ M3 |
 | ML detector with evaluation set; LLM incident copilot | ⬜ M3 |
 
@@ -48,6 +51,8 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 | Legitimate edit touching 100% of files | score 0.20, *not* flagged |
 | One byte flipped in a stored chunk | `verify --deep` reports it; restore refuses |
 | Snapshot deleted from disk | hash-chain break reported |
+| Root user tries to overwrite or delete a backup on S3 Object Lock | refused by the storage service (CI, real MinIO) |
+| AI agent overwrites config, tries to delete the database | delete held; undo restores config, keeps the human's later edit |
 
 ## Quick start
 
@@ -58,8 +63,10 @@ git clone https://github.com/HarshiniTayi23/Ageis && cd Ageis
 make setup      # creates .env, downloads modules
 make check      # format, vet, lint, tests (race detector on)
 make demo       # ransomware attack -> detection -> clean recovery, ~10s
+make demo-agent # rogue AI agent -> contained -> undone (PocketOS replay)
 make up         # local MinIO (Object Lock) + Postgres
 ./scripts/check-object-lock.sh   # proves even root can't delete a locked object
+make integration                 # full backup/attack/recovery against MinIO
 ```
 
 Run `make help` for every command.
@@ -71,11 +78,13 @@ cmd/aegis/            CLI + HTTP server entrypoint
 internal/
   chunker/            content-defined chunking
   seal/               key derivation and authenticated encryption
-  store/              object-storage interface + local WORM backend
-  repo/               backup engine: snapshot, restore, verify
+  store/              object-storage interface, local WORM, S3 (SigV4) backends
+  repo/               backup engine: snapshot, restore, verify, drill
   detect/             ransomware anomaly scoring
   server/             HTTP API
-  journal/            (M2) AI-agent action journal
+  journal/            AI-agent action journal (event-sourced, in the vault)
+  agentfs/            guarded workspace: confinement, held deletes, undo
+  mcp/                Model Context Protocol server (stdio)
   catalog/            (M3) Raft-replicated catalog
   copilot/            (M3) LLM incident summaries
 deploy/compose/       local dev stack
@@ -91,7 +100,9 @@ Each milestone ships a product document before the code: personas, user research
 
 ## Known limitations
 
-- The local-disk store can be overwritten by root. Aegis *detects* it but can't *prevent* it. The S3 Object Lock backend fixes that.
+- The local-disk store can be overwritten by root. Aegis *detects* it but can't *prevent* it. Use the S3 backend (`--store s3`) for real immutability.
+- On S3, a writer can add a delete marker that *hides* (not destroys) the latest version; recovery by version listing is roadmap work (ADR-0006).
+- Agent undo only covers agents that act through Aegis's tool server. An agent given raw credentials bypasses it (ADR-0007).
 - Single writer per repository until the Raft catalog lands.
 - The detector is heuristic and tuned on synthetic data.
 

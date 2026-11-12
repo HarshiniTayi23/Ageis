@@ -50,7 +50,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `usage: aegis <init|backup|list|restore|verify|drill|serve> [flags]`)
+	fmt.Fprintln(os.Stderr, `usage: aegis <init|backup|list|restore|verify|drill|serve|agent-serve|agent-log|agent-pending|agent-approve|agent-reject|agent-undo> [flags]`)
 }
 
 func run(ctx context.Context, cmd string, args []string) error {
@@ -65,6 +65,11 @@ func run(ctx context.Context, cmd string, args []string) error {
 	asJSON := fs.Bool("json", false, "JSON output")
 	storeKind := fs.String("store", envOr("AEGIS_STORE", "local"), "storage backend: local | s3")
 	ifMissing := fs.Bool("if-missing", false, "succeed if the repository already exists (init)")
+	var ao agentOpts
+	fs.StringVar(&ao.agent, "agent", "", "agent identity (agent-serve) or filter (agent-log, agent-undo)")
+	fs.StringVar(&ao.workspace, "workspace", os.Getenv("AEGIS_WORKSPACE"), "workspace directory agents act on")
+	fs.StringVar(&ao.as, "as", "human:"+envOr("USER", "operator"), "your identity for approve/reject/undo")
+	fs.BoolVar(&ao.dryRun, "dry-run", false, "show what agent-undo would change without changing anything")
 	report := fs.String("report", "", "also write the drill report to this file (drill)")
 	_ = fs.Parse(args) // ExitOnError: Parse never returns an error
 
@@ -90,6 +95,10 @@ func run(ctx context.Context, cmd string, args []string) error {
 	}
 	r, err := repo.Open(ctx, st, pass)
 	if err != nil {
+		return err
+	}
+	ao.json = *asJSON
+	if handled, err := runAgent(ctx, cmd, r, ao, fs.Args()); handled {
 		return err
 	}
 

@@ -8,17 +8,17 @@
 **Outcome:** Ravi can recover the last clean copy of his data after a ransomware attack, from storage the attacker cannot delete, and Meera can prove beforehand that recovery works.
 - ✅ Content-defined chunking + dedup, encryption, hash-chained snapshots
 - ✅ Rule-based ransomware detector, `restore --latest-clean`, deep verify
-- ⬜ **S3 backend with Object Lock (COMPLIANCE)**: closes the "root can overwrite local files" gap
-- ⬜ **`aegis drill`**: scheduled test restore with an audit report *(new in v0.2, came out of RICE scoring)*
-- ⬜ Kubernetes manifests proven on a real cluster (kind, in CI)
-- ✅ Personas (v0.2) · ⬜ PRD · ⬜ Demo video #1
+- ✅ **S3 backend with Object Lock (COMPLIANCE)**: closes the "root can overwrite local files" gap
+- ✅ **`aegis drill`**: scheduled test restore with an audit report *(new in v0.2, came out of RICE scoring)*
+- ✅ Kubernetes manifests proven on a real cluster (kind, in CI)
+- ✅ Personas (v0.2) · ✅ PRD · ⬜ Demo video #1 *(needs you)*
 
 ### M2 · Agent undo
 **Outcome:** Arjun can see exactly what one agent changed and roll back only that, without losing human work.
-- ⬜ **Guarded file-tool server for agents (MCP)**: agents read and write files through Aegis, and every change is journalled with the agent's identity
-- ⬜ Guardrails: destructive actions (deletes, bulk overwrites) are held for a delay or approval
-- ⬜ Selective undo by agent, with conflict detection when a human edited the same file later
-- ⬜ Replay of the PocketOS scenario as a demo
+- ✅ **Guarded file-tool server for agents (MCP)**: agents read and write files through Aegis, and every change is journalled with the agent's identity
+- ✅ Guardrails: deletes are held for human approval *(bulk-overwrite rate guard: M2.5)*
+- ✅ Selective undo by agent, with conflict detection when a human edited the same file later
+- ✅ Replay of the PocketOS scenario as a demo (`make demo-agent`, runs in CI)
 - ⬜ Postgres change capture *(moved to M2.5, see "What changed")*
 - ⬜ Competitive analysis
 

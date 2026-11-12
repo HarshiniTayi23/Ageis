@@ -12,7 +12,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/aegis ./cmd/aegis
 # who compromises the container to work with.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/aegis /aegis
-USER nonroot:nonroot
+# Numeric UID: Kubernetes runAsNonRoot can only verify numeric users.
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/aegis"]
 CMD ["serve", "--repo", "/repo", "--source", "/data", "--addr", ":8080"]

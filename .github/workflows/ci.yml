@@ -36,7 +36,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: ./scripts/demo.sh
+      - name: ransomware attack -> detect -> recover
+        run: ./scripts/demo.sh
+      - name: rogue AI agent -> contain -> undo (PocketOS replay)
+        run: ./scripts/demo-agent.sh
 
   stack:
     name: S3 Object Lock (MinIO)

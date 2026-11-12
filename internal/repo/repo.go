@@ -681,3 +681,7 @@ func (r *Repo) Drills(ctx context.Context) ([]*DrillReport, error) {
 	}
 	return out, nil
 }
+
+// Vault exposes the repository's object store and keyring so other ingest
+// paths (the agent journal) share the same immutable, encrypted storage.
+func (r *Repo) Vault() (store.ObjectStore, *seal.Keyring) { return r.st, r.keys }

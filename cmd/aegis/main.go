@@ -5,7 +5,12 @@
 //	aegis list     --repo DIR
 //	aegis restore  --repo DIR [--id ID | --latest-clean] DEST
 //	aegis verify   --repo DIR [--deep]
+//	aegis drill    --repo DIR [--report FILE]
 //	aegis serve    --repo DIR --source DIR [--addr :8080]
+//
+// Every command accepts --store local|s3 (default local, or $AEGIS_STORE).
+// The S3 backend reads AEGIS_S3_ENDPOINT, AEGIS_BUCKET, AEGIS_S3_REGION,
+// AEGIS_S3_PATH_STYLE, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
 //
 // The passphrase is read from the AEGIS_PASSPHRASE environment variable (in
 // Kubernetes it is mounted from a Secret).
@@ -21,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -44,7 +50,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `usage: aegis <init|backup|list|restore|verify|serve> [flags]`)
+	fmt.Fprintln(os.Stderr, `usage: aegis <init|backup|list|restore|verify|drill|serve> [flags]`)
 }
 
 func run(ctx context.Context, cmd string, args []string) error {
@@ -57,22 +63,29 @@ func run(ctx context.Context, cmd string, args []string) error {
 	addr := fs.String("addr", ":8080", "listen address (serve)")
 	source := fs.String("source", "", "directory to protect (serve)")
 	asJSON := fs.Bool("json", false, "JSON output")
+	storeKind := fs.String("store", envOr("AEGIS_STORE", "local"), "storage backend: local | s3")
+	ifMissing := fs.Bool("if-missing", false, "succeed if the repository already exists (init)")
+	report := fs.String("report", "", "also write the drill report to this file (drill)")
 	_ = fs.Parse(args) // ExitOnError: Parse never returns an error
 
 	pass := os.Getenv("AEGIS_PASSPHRASE")
 	if pass == "" {
 		return errors.New("AEGIS_PASSPHRASE is not set")
 	}
-	st, err := store.NewLocalWORM(*repoDir, *retention)
+	st, where, err := openStore(*storeKind, *repoDir, *retention)
 	if err != nil {
 		return err
 	}
 
 	if cmd == "init" {
 		if _, err := repo.Init(ctx, st, pass); err != nil {
+			if *ifMissing && errors.Is(err, repo.ErrInitialised) {
+				fmt.Println("repository already initialised at", where)
+				return nil
+			}
 			return err
 		}
-		fmt.Println("initialised repository at", *repoDir)
+		fmt.Println("initialised repository at", where)
 		return nil
 	}
 	r, err := repo.Open(ctx, st, pass)
@@ -142,6 +155,32 @@ func run(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		fmt.Println("restored", target, "to", fs.Arg(0), "(every file SHA-256 verified)")
+		return nil
+
+	case "drill":
+		rep, err := r.Drill(ctx)
+		if err != nil {
+			return err
+		}
+		if *report != "" {
+			b, _ := json.MarshalIndent(rep, "", "  ")
+			if err := os.WriteFile(*report, append(b, '\n'), 0o600); err != nil {
+				return err
+			}
+		}
+		if *asJSON {
+			return printJSON(rep)
+		}
+		status := "PASS"
+		if !rep.Passed {
+			status = "FAIL: " + rep.Error
+		}
+		fmt.Printf("drill %s  snapshot=%s (%s)  files=%d  size=%s  took=%dms\n", status,
+			rep.SnapshotID, rep.SnapshotTime.Format(time.RFC3339), rep.Files, human(rep.Bytes), rep.DurationMS)
+		fmt.Println("report sealed in the vault as", rep.Key)
+		if !rep.Passed {
+			return errors.New("recovery drill failed")
+		}
 		return nil
 
 	case "verify":
@@ -219,6 +258,28 @@ func human(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f%ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// openStore builds the configured ObjectStore and a description of where it is.
+func openStore(kind, dir string, retention time.Duration) (store.ObjectStore, string, error) {
+	switch kind {
+	case "local":
+		st, err := store.NewLocalWORM(dir, retention)
+		return st, dir, err
+	case "s3":
+		endpoint := envOr("AEGIS_S3_ENDPOINT", "https://s3.amazonaws.com")
+		cfg := store.S3Config{
+			Endpoint:  endpoint,
+			Region:    os.Getenv("AEGIS_S3_REGION"),
+			Bucket:    os.Getenv("AEGIS_BUCKET"),
+			Creds:     store.Credentials{AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"), SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY")},
+			PathStyle: envOr("AEGIS_S3_PATH_STYLE", fmt.Sprint(!strings.Contains(endpoint, "amazonaws.com"))) == "true",
+			Retention: retention,
+		}
+		st, err := store.NewS3(cfg)
+		return st, "s3://" + cfg.Bucket + " at " + endpoint, err
+	}
+	return nil, "", fmt.Errorf("unknown --store %q (want local or s3)", kind)
 }
 
 func envOr(k, def string) string {

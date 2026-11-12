@@ -24,6 +24,10 @@ build: ## Build the aegis binary into bin/
 test: ## Run unit tests with the race detector
 	go test -race -count=1 ./...
 
+.PHONY: integration
+integration: .env ## Run integration tests against the local stack (needs make up)
+	set -a; source .env; set +a; go test -tags integration -count=1 -v ./...
+
 .PHONY: fmt
 fmt: ## Format all Go code
 	gofmt -w .

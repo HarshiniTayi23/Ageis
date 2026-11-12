@@ -18,7 +18,7 @@ jobs:
           go-version-file: go.mod
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-      - run: go vet ./...
+      - run: go vet ./... && go vet -tags integration ./...
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5.0
@@ -39,17 +39,70 @@ jobs:
       - run: ./scripts/demo.sh
 
   stack:
-    name: docker image + local stack
+    name: S3 Object Lock (MinIO)
     runs-on: ubuntu-latest
     needs: check
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t aegis:ci .
-      - name: start MinIO with Object Lock and verify a locked object cannot be deleted
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: start MinIO and create the locked vault bucket
         run: |
           cp .env.example .env
           docker compose -f deploy/compose/compose.yaml --env-file .env up -d --wait minio
           docker compose -f deploy/compose/compose.yaml --env-file .env run --rm minio-init
-          ./scripts/check-object-lock.sh
+      - name: root cannot delete a locked object
+        run: ./scripts/check-object-lock.sh
+      - name: integration tests (backup, attack, recovery against real S3)
+        run: make integration
+      - name: CLI smoke test with --store s3
+        run: |
+          set -a; source .env; set +a
+          export AEGIS_STORE=s3 AEGIS_PASSPHRASE=ci-smoke
+          # fresh bucket prefix is not supported by the CLI yet, so use a fresh bucket
+          export AEGIS_BUCKET=aegis-smoke-$RANDOM
+          docker compose -f deploy/compose/compose.yaml --env-file .env run --rm -e AEGIS_BUCKET minio-init
+          mkdir -p /tmp/data && for i in $(seq 1 20); do seq 1 2000 | sed "s/^/row $i,/" > /tmp/data/f$i.csv; done
+          go run ./cmd/aegis init
+          go run ./cmd/aegis backup /tmp/data
+          go run ./cmd/aegis drill --report drill-report.json
+          go run ./cmd/aegis verify --deep
+          cat drill-report.json
       - if: always()
         run: docker compose -f deploy/compose/compose.yaml --env-file .env down -v
+
+  kubernetes:
+    name: deploy to kind
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t aegis:latest .
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: aegis
+      - run: kind load docker-image aegis:latest --name aegis
+      - name: apply manifests and wait for rollout
+        run: |
+          kubectl apply -f deploy/k8s/aegis.yaml
+          kubectl -n aegis rollout status deploy/aegis --timeout=180s
+      - name: restart the pod (init must be idempotent)
+        run: |
+          kubectl -n aegis rollout restart deploy/aegis
+          kubectl -n aegis rollout status deploy/aegis --timeout=180s
+      - name: run the hourly backup CronJob once and check the API
+        run: |
+          kubectl -n aegis create job --from=cronjob/aegis-hourly-backup ci-backup
+          kubectl -n aegis wait --for=condition=complete job/ci-backup --timeout=120s
+          kubectl -n aegis port-forward svc/aegis 8080:80 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do curl -fsS localhost:8080/healthz && break; sleep 1; done
+          echo; curl -fsS localhost:8080/readyz; echo
+          curl -fsS localhost:8080/api/v1/snapshots | tee snapshots.json
+          grep -q '"id"' snapshots.json
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl -n aegis get all,pvc
+          kubectl -n aegis describe pods
+          kubectl -n aegis logs deploy/aegis --all-containers --tail=100 || true

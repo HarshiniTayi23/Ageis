@@ -292,3 +292,44 @@ func TestDeletedSnapshotBreaksChain(t *testing.T) {
 	}
 	t.Log(rep.Problems)
 }
+
+func TestDrillPassesAndIsSealed(t *testing.T) {
+	ctx := context.Background()
+	r, _, _ := setupRepo(t)
+	src := t.TempDir()
+	makeCorpus(t, src, 10)
+	sn, _ := r.Backup(ctx, src)
+	rep, err := r.Drill(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Passed || rep.SnapshotID != sn.ID || rep.Files != 10 {
+		t.Fatalf("unexpected report: %+v", rep)
+	}
+	past, err := r.Drills(ctx)
+	if err != nil || len(past) != 1 || past[0].SnapshotID != sn.ID {
+		t.Fatalf("drill history: %v %+v", err, past)
+	}
+}
+
+func TestDrillReportsTamperingAsFailure(t *testing.T) {
+	ctx := context.Background()
+	r, _, dir := setupRepo(t)
+	src := t.TempDir()
+	makeCorpus(t, src, 5)
+	sn, _ := r.Backup(ctx, src)
+	id := sn.Files[0].Chunks[0]
+	p := filepath.Join(dir, "chunks", id[:2], id)
+	os.Chmod(p, 0o644)
+	b, _ := os.ReadFile(p)
+	b[len(b)/2] ^= 0xFF
+	os.WriteFile(p, b, 0o644)
+
+	rep, err := r.Drill(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Passed || rep.Error == "" {
+		t.Fatalf("drill passed on tampered data: %+v", rep)
+	}
+}

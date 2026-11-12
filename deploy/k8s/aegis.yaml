@@ -60,12 +60,12 @@ spec:
         fsGroup: 65532
         seccompProfile: {type: RuntimeDefault}
       initContainers:
-        # Idempotent: fails harmlessly with "already initialised".
+        # --if-missing makes this idempotent: pod restarts must not fail here.
         - name: init-repo
           image: aegis:latest
           imagePullPolicy: IfNotPresent
           command: ["/aegis"]
-          args: ["init", "--repo", "/repo"]
+          args: ["init", "--if-missing", "--repo", "/repo"]
           envFrom: [{secretRef: {name: aegis-passphrase}}]
           volumeMounts: [{name: repo, mountPath: /repo}]
       containers:

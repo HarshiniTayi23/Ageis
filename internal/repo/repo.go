@@ -45,6 +45,7 @@ var (
 	ErrWrongKey     = errors.New("repo: wrong passphrase")
 	ErrNoSnapshots  = errors.New("repo: no snapshots")
 	ErrNoCleanPoint = errors.New("repo: no clean snapshot found")
+	ErrInitialised  = errors.New("repo: already initialised")
 )
 
 type config struct {
@@ -102,7 +103,7 @@ func Init(ctx context.Context, st store.ObjectStore, passphrase string) (*Repo, 
 	cfg, _ := json.Marshal(config{Version: formatVersion, Salt: salt, Created: time.Now().UTC()})
 	if err := st.Put(ctx, "config", cfg); err != nil {
 		if errors.Is(err, store.ErrExists) {
-			return nil, errors.New("repo: already initialised")
+			return nil, ErrInitialised
 		}
 		return nil, err
 	}
@@ -596,4 +597,87 @@ func (r *Repo) Verify(ctx context.Context, deep bool) (*VerifyReport, error) {
 		}
 	}
 	return rep, nil
+}
+
+// ----------------------------------------------------------------- drill ---
+
+// DrillReport is the evidence produced by a recovery drill.
+type DrillReport struct {
+	Time         time.Time `json:"time"`
+	SnapshotID   string    `json:"snapshot_id"`
+	SnapshotTime time.Time `json:"snapshot_time"`
+	Files        int       `json:"files"`
+	Bytes        int64     `json:"bytes"`
+	DurationMS   int64     `json:"duration_ms"`
+	Passed       bool      `json:"passed"`
+	Error        string    `json:"error,omitempty"`
+	Key          string    `json:"key"` // where the sealed report lives in the vault
+}
+
+// Drill proves recoverability before it's needed: it restores the latest
+// clean snapshot into a scratch directory (verifying every file's SHA-256),
+// deletes the scratch copy, and seals a report into the vault. Because the
+// vault is write-once, past drill reports can't be quietly edited either.
+//
+// A failed restore is reported (Passed=false), not returned as an error;
+// Drill only returns an error if it could not produce a report at all.
+func (r *Repo) Drill(ctx context.Context) (*DrillReport, error) {
+	start := time.Now()
+	rep := &DrillReport{Time: start.UTC()}
+	snap, err := r.LatestClean(ctx)
+	if err != nil {
+		rep.Error = err.Error()
+	} else {
+		rep.SnapshotID, rep.SnapshotTime = snap.ID, snap.Time
+		rep.Files, rep.Bytes = snap.Stats.Files, snap.Stats.Bytes
+		scratch, err := os.MkdirTemp("", "aegis-drill-*")
+		if err != nil {
+			return nil, err
+		}
+		if err := r.Restore(ctx, snap.ID, scratch); err != nil {
+			rep.Error = err.Error()
+		} else {
+			rep.Passed = true
+		}
+		_ = os.RemoveAll(scratch)
+	}
+	rep.DurationMS = time.Since(start).Milliseconds()
+	rep.Key = "drills/" + newSnapshotID(rep.Time)
+	body, err := json.Marshal(rep)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := r.keys.Seal(rep.Key, body)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.st.Put(ctx, rep.Key, blob); err != nil {
+		return nil, fmt.Errorf("repo: storing drill report: %w", err)
+	}
+	return rep, nil
+}
+
+// Drills returns all past drill reports, oldest first.
+func (r *Repo) Drills(ctx context.Context) ([]*DrillReport, error) {
+	keys, err := r.st.List(ctx, "drills/")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*DrillReport, 0, len(keys))
+	for _, k := range keys {
+		blob, err := r.st.Get(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		body, err := r.keys.Open(k, blob)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", k, err)
+		}
+		var d DrillReport
+		if err := json.Unmarshal(body, &d); err != nil {
+			return nil, err
+		}
+		out = append(out, &d)
+	}
+	return out, nil
 }

@@ -33,6 +33,7 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 | Ransomware detector: entropy, format breakage, rename/move pairing, mass deletion, notes | ✅ v2: 87% recall (68% on held-out), 0% false alarms on 440 labelled snapshots ([eval](docs/eval/README.md)) |
 | `restore --latest-clean` with per-file SHA-256 verification | ✅ M1 |
 | HTTP API, container image, Kubernetes manifests (deployed to kind in CI) | ✅ M1 |
+| Prometheus `/metrics`: backups, dedup, anomaly score, drill status, request counts | ✅ M3 |
 | S3 backend with Object Lock (COMPLIANCE mode); stdlib SigV4 client | ✅ M1 |
 | `aegis drill`: verified test restore with a sealed audit report | ✅ M1 |
 | MCP tool server for AI agents: every write journalled in the vault | ✅ M2 |

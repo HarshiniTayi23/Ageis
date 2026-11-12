@@ -105,6 +105,8 @@ jobs:
           echo; curl -fsS localhost:8080/readyz; echo
           curl -fsS localhost:8080/api/v1/snapshots | tee snapshots.json
           grep -q '"id"' snapshots.json
+          curl -fsS localhost:8080/metrics | tee metrics.txt | grep '^aegis_backups_total'
+          grep -q 'aegis_backups_total{result="ok"} 1' metrics.txt
       - name: diagnostics
         if: failure()
         run: |

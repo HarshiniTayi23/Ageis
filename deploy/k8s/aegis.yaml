@@ -54,6 +54,10 @@ spec:
   template:
     metadata:
       labels: {app: aegis}
+      annotations: # picked up by a standard Prometheus kubernetes_sd config
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
     spec:
       securityContext:
         runAsNonRoot: true

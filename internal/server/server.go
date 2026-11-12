@@ -16,6 +16,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,10 +28,11 @@ type Server struct {
 	source string
 	log    *slog.Logger
 	mu     sync.Mutex // one backup at a time
+	m      *metrics
 }
 
 func New(r *repo.Repo, source string, log *slog.Logger) *Server {
-	return &Server{repo: r, source: source, log: log}
+	return &Server{repo: r, source: source, log: log, m: newMetrics()}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -42,6 +44,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/recovery-point", s.recoveryPoint)
 	mux.HandleFunc("POST /api/v1/backups", s.backup)
 	mux.HandleFunc("POST /api/v1/verify", s.verify)
+	mux.HandleFunc("POST /api/v1/drills", s.drill)
+	mux.Handle("GET /metrics", s.m)
 	return s.logging(mux)
 }
 
@@ -112,7 +116,9 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.mu.Unlock()
+	start := time.Now()
 	sn, err := s.repo.Backup(r.Context(), s.source)
+	s.m.observeBackup(sn, err, time.Since(start))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -136,11 +142,38 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, rep)
 }
 
+func (s *Server) drill(w http.ResponseWriter, r *http.Request) {
+	if !s.mu.TryLock() {
+		writeErr(w, http.StatusConflict, errors.New("a backup or drill is already running"))
+		return
+	}
+	defer s.mu.Unlock()
+	rep, err := s.repo.Drill(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.m.observeDrill(rep)
+	code := http.StatusCreated
+	if !rep.Passed {
+		code = http.StatusConflict
+	}
+	writeJSON(w, code, rep)
+}
+
 func (s *Server) logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		s.log.Info("request", "method", r.Method, "path", r.URL.Path, "dur", time.Since(start))
+		rec := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		route := r.Pattern // the matched route, e.g. "GET /api/v1/snapshots/{id}" (bounded label set)
+		if route == "" {
+			route = "unmatched"
+		} else if i := strings.IndexByte(route, ' '); i >= 0 {
+			route = route[i+1:]
+		}
+		s.m.observeRequest(r.Method, route, rec.code)
+		s.log.Info("request", "method", r.Method, "path", r.URL.Path, "code", rec.code, "dur", time.Since(start))
 	})
 }
 

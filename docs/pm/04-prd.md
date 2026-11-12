@@ -41,8 +41,8 @@ Ransomware crews target backups in 89% of attacks, and when backups fall, recove
 | Metric | Baseline | Target | How we measure it |
 |---|---|---|---|
 | Time from "attack noticed" to "clean point identified" | Unknown. H1 says hours to days; to be measured in user research | < 1 minute | Demo script timing |
-| Attack detection rate (recall) | n/a | ≥ 95% of simulated attacks | Test scenarios; a larger labelled set arrives in M3 |
-| False alarms on normal business changes | n/a | ≤ 2% of clean snapshots | Test scenarios |
+| Attack detection rate (recall) | v1: 38% / 33% held-out (measured) | ≥ 95% of simulated attacks | `make eval`; v2 is at 87% tuning, 68% held-out (see docs/eval) |
+| False alarms on normal business changes | v1: 0% | ≤ 2% of clean snapshots | `make eval`, gated in CI; v2 is at 0% |
 | Restored files verified | n/a | 100% | Built into restore |
 | Upload size for an hourly backup with small changes | Full copy = 100% | < 5% of total size | Backup stats |
 | Successful deletes of locked objects | n/a | 0 | CI Object Lock check |

@@ -88,3 +88,42 @@ A running record of what was built, what was decided, what broke, and what's sti
 **For review**
 - **Read `docs/pm/06` before any Rubrik interview.** Not knowing that Rubrik ships Agent Rewind while presenting "agent undo" would be the single worst possible moment in the interview.
 - Do you agree that only deletes should be held, and overwrites only recorded? That's hypothesis H3. Holding overwrites too would be safer but slower.
+
+---
+
+## 2026-11-12 · Session 1 (continued): M3 begins, measuring the detector honestly
+
+### Why this came before Raft
+The roadmap put Raft first in M3 for strategic reasons. But the PRD's recall target (≥ 95%) had never been measured against anything except scenarios I'd chosen myself. Shipping an "AI" feature without an evaluation is the classic AI-PM mistake, so the evaluation came first.
+
+### What I built
+- `cmd/aegis-eval` (`make eval`): 440 labelled snapshots from 22 scenarios × 20 seeds, using real files and real entropy, with hard cases on both sides.
+- **The held-out set was written before any tuning** and never tuned against.
+
+### What it found
+- **v1 recall was 38%** (33% held-out), not the near-100% the unit tests implied.
+- It missed wipers, renames to unknown extensions, base64-wrapped ciphertext, and encryption of already-compressed files.
+
+### v2 detector
+- Pairs renamed and moved files with their originals.
+- Sniffs file formats, so a broken JPEG or PDF signature counts as hostile even with no entropy change.
+- Treats mass deletion as a signal.
+- Uses a lower entropy-jump threshold for text.
+
+### Where it got to
+- **The first v2 attempt hit 75% recall but 9% false alarms**, breaking the PRD's 2% counter-metric: a legitimate password-protected export looked like an attack.
+- I fixed it with domain reasoning (legitimate tools don't mass-corrupt *binary* formats), not by fitting the data.
+- **Final: 87% recall on tuning, 68% on held-out, 0% false alarms on both.**
+- Remaining misses: slow encryption, which needs history (the M3 statistical detector), and XOR on the held-out set, deliberately not fixed.
+
+### Guarding the result
+- CI now **gates** on detection quality: recall ≥ 85% and false alarms ≤ 2%. Held-out recall is reported but not gated.
+- New detector unit tests cover the wiper, rename pairing, binary-format breakage, and moves that must *not* be flagged.
+
+### Process notes, for honesty
+- Before tuning, I fixed a realism bug in my own generator: the fake JPEGs lacked the JPEG file signature. It's a data fix, not tuning, and the v1 numbers were re-recorded after it. Both runs gave the same headline (38% / 33%).
+- The scenarios were written by the detector's author. Real-world recall is unknown. The eval docs say so up front.
+
+**For review**
+- This is your best AI-PM interview story: *"My tests said ~100%. My evaluation said 38%. My first fix broke the false-alarm budget. Here's how I chose between recall and precision, and why the held-out number is the one I quote."*
+- The PRD target of 95% recall is **not met** (68% held-out). Do you lower the target, or keep it and plan the history-based detector? I kept it. A PM shouldn't move the goalposts to declare victory.

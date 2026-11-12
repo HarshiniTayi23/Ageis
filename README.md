@@ -30,7 +30,7 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 | Content-defined chunking + dedup (FastCDC, ~1.3 GB/s) | ✅ M1 |
 | AES-256-GCM encryption, keyed chunk addresses, PBKDF2 keys | ✅ M1 |
 | Hash-chained, tamper-evident snapshot history | ✅ M1 |
-| Ransomware detector (entropy jumps, rename storms, ransom notes) | ✅ M1 |
+| Ransomware detector: entropy, format breakage, rename/move pairing, mass deletion, notes | ✅ v2: 87% recall (68% on held-out), 0% false alarms on 440 labelled snapshots ([eval](docs/eval/README.md)) |
 | `restore --latest-clean` with per-file SHA-256 verification | ✅ M1 |
 | HTTP API, container image, Kubernetes manifests (deployed to kind in CI) | ✅ M1 |
 | S3 backend with Object Lock (COMPLIANCE mode); stdlib SigV4 client | ✅ M1 |
@@ -39,7 +39,8 @@ Both threats destroy the same thing: the ability to recover. Full, sourced probl
 | Deletes held for human approval; undo one agent, keep human edits | ✅ M2 |
 | Postgres change capture for agents | ⬜ M2.5 |
 | 3-node Raft catalog | ⬜ M3 |
-| ML detector with evaluation set; LLM incident copilot | ⬜ M3 |
+| Detector evaluation harness + CI quality gate | ✅ M3 |
+| History-based detector (slow encryption); LLM incident copilot | ⬜ M3 |
 
 ## Results so far (from the test suite)
 
@@ -106,7 +107,7 @@ Each milestone ships a product document before the code: personas, user research
 - On S3, a writer can add a delete marker that *hides* (not destroys) the latest version; recovery by version listing is roadmap work (ADR-0006).
 - Agent undo only covers agents that act through Aegis's tool server. An agent given raw credentials bypasses it (ADR-0007).
 - Single writer per repository until the Raft catalog lands.
-- The detector is heuristic and tuned on synthetic data.
+- The detector is heuristic and tuned on synthetic data written by its author: 87% recall on tuning scenarios, 68% on held-out ones. It misses slow encryption spread over many backups.
 
 ## License
 

@@ -26,7 +26,8 @@
 **Outcome:** the system survives a node failure, and an incident summary tells Ravi what happened in plain language, with every claim checked against real data.
 - ⬜ 3-node catalog with Raft
 - ⬜ Prometheus metrics
-- ⬜ Statistical/ML detector with a labelled evaluation set
+- ✅ Labelled evaluation set (440 snapshots, held-out split) + CI quality gate; rule-based v2 detector (recall 38% → 87% tuning / 68% held-out, 0% false alarms)
+- ⬜ Statistical detector using snapshot history (targets slow encryption, the main remaining miss)
 - ⬜ LLM incident copilot, measured against the AI evaluation plan
 
 ## RICE scores

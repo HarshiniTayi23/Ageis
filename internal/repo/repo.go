@@ -295,6 +295,7 @@ func (r *Repo) backupFile(ctx context.Context, p, rel string, jobs chan<- upload
 	h := sha256.New()
 	var hist [256]uint64
 	var total uint64
+	var head []byte // first bytes, for content-type sniffing
 	c := chunker.New(f)
 	for {
 		chunk, err := c.Next()
@@ -305,6 +306,9 @@ func (r *Repo) backupFile(ctx context.Context, p, rel string, jobs chan<- upload
 			return nil, err
 		}
 		h.Write(chunk)
+		if len(head) < 512 {
+			head = append(head, chunk[:min(len(chunk), 512-len(head))]...)
+		}
 		for _, b := range chunk {
 			hist[b]++
 		}
@@ -325,6 +329,7 @@ func (r *Repo) backupFile(ctx context.Context, p, rel string, jobs chan<- upload
 	fe.Size = int64(total) //nolint:gosec // G115: a file cannot exceed 2^63 bytes
 	fe.SHA256 = hex.EncodeToString(h.Sum(nil))
 	fe.Entropy = detect.Entropy(&hist, total)
+	fe.Type = detect.Sniff(head)
 	return fe, nil
 }
 

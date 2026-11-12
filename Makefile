@@ -28,6 +28,10 @@ test: ## Run unit tests with the race detector
 integration: .env ## Run integration tests against the local stack (needs make up)
 	set -a; source .env; set +a; go test -tags integration -count=1 -v ./...
 
+.PHONY: eval
+eval: ## Evaluate the ransomware detector on labelled scenarios; writes docs/eval/detector-report.md
+	go run ./cmd/aegis-eval -n 20 -gate > docs/eval/detector-report.md && sed -n '/Set | Recall/,/^$$/p' docs/eval/detector-report.md
+
 .PHONY: fmt
 fmt: ## Format all Go code
 	gofmt -w .

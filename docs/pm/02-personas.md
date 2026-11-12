@@ -1,6 +1,6 @@
 # 02 · Personas
 
-**Status:** Draft v0.1. Every line marked *(assumption)* must be confirmed or killed in [03 · User research](03-user-research.md). · **Owner:** Sri Harshini Tayi · **Last updated:** 2026-11-12
+**Status:** Draft v0.2. Every line marked *(assumption)* must be confirmed or killed in [03 · User research](03-user-research.md). · **Owner:** Sri Harshini Tayi · **Last updated:** 2026-11-12
 
 A persona is a specific person in a specific situation, not a demographic. The test of a good one: two engineers disagree about a feature, and they can settle it by asking "what would *this person* need at 3 a.m.?"
 
@@ -79,8 +79,13 @@ A persona is a specific person in a specific situation, not a demographic. The t
 | Agent guardrails | Agents never blocked | Every destructive action reviewed | Delay only destructive actions; everything else is just recorded |
 | Detail | One command, one answer | Full evidence trail | Simple output by default, evidence available on demand |
 
-## Questions for you (Sri Harshini) before this is v1.0
+## Provisional decisions (v0.2, 2026-11-12)
 
-1. Do you agree Ravi is primary for M1? If you'd choose Meera, what would change in the product?
-2. Arjun's company is a startup and Ravi's is mid-size. Would Rubrik's real customers look more like Ravi's company, or bigger? What does that change?
-3. Which *(assumption)* line here, if wrong, would hurt the project most? That's the first question for your interviews.
+These were open questions. They're answered provisionally so building can continue. Each can be overturned. See `docs/BUILD_LOG.md`.
+
+1. **Is Ravi primary for M1?** Yes. He's the one who runs the restore, and every M1 capability is a restore capability. If Meera were primary, the first feature would be *proof*, not *recovery*: scheduled test restores with an audit report. That idea scored well enough in the roadmap's RICE table that it's now in M1 as `aegis drill` (requirement R7 in the PRD).
+2. **Do Rubrik's customers look like Ravi's company?** Mostly bigger: thousands of employees, many sites, separate backup and security teams. Three implications, all already on the roadmap:
+   - More data, which justifies the distributed catalog (M3).
+   - More than one admin, so no single person should be able to shorten retention. That's handled by COMPLIANCE-mode Object Lock in M1.
+   - Separate teams, so the alert must explain itself to someone who didn't configure it.
+3. **Which assumption would hurt most if wrong?** For M1 it's **H1**, that finding a clean recovery point takes hours to days. If teams already find it in minutes, `--latest-clean` is a nice-to-have, and the pitch would shift to immutability and proof. For M2 it's **H3**, that a short delay on destructive agent actions is acceptable. Both are the first questions in the interview script.

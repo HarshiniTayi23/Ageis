@@ -20,7 +20,7 @@
 - ✅ Selective undo by agent, with conflict detection when a human edited the same file later
 - ✅ Replay of the PocketOS scenario as a demo (`make demo-agent`, runs in CI)
 - ⬜ Postgres change capture *(moved to M2.5, see "What changed")*
-- ⬜ Competitive analysis
+- ✅ Competitive analysis (finding: Rubrik already ships Agent Rewind; see 06)
 
 ### M3 · Distributed and AI depth
 **Outcome:** the system survives a node failure, and an incident summary tells Ravi what happened in plain language, with every claim checked against real data.

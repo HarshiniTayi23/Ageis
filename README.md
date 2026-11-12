@@ -98,6 +98,8 @@ docs/learning/        learning path
 
 Each milestone ships a product document before the code: personas, user research, PRD, roadmap with RICE scoring, competitive analysis, and an AI evaluation plan. See [docs/pm](docs/pm/README.md). Technical trade-offs are recorded as [ADRs](docs/adr/).
 
+**On originality:** the [competitive analysis](docs/pm/06-competitive-analysis.md) found that Rubrik already ships agent undo (Agent Rewind, 2025) and per-tool-call agent governance at an MCP gateway (Agent Identity, 2026), and Veeam and Cohesity have announced similar products. Aegis doesn't claim the idea. It's a from-scratch, fully inspectable implementation of these problems, built to understand where the hard parts are, such as undoing an agent without losing a human's later edit.
+
 ## Known limitations
 
 - The local-disk store can be overwritten by root. Aegis *detects* it but can't *prevent* it. Use the S3 backend (`--store s3`) for real immutability.

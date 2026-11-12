@@ -1,6 +1,6 @@
 # ADR-0003: Go for the service, MinIO with Object Lock for local immutable storage
 
-**Status:** Accepted · **Date:** 2026-11-04
+**Status:** Accepted · **Date:** 2026-11-04 · Image source superseded by [ADR-0004](0004-minio-image-source.md)
 
 ## Context
 We need a language suited to concurrent I/O-heavy services, and a local storage backend that is *actually* immutable. The current local-disk store can be overwritten by root, which the demo shows openly.
@@ -16,7 +16,7 @@ We need a language suited to concurrent I/O-heavy services, and a local storage 
 | Python | Fastest to write | Weak at CPU-bound concurrency (GIL); harder to ship as a small static image |
 | Rust | Strongest safety and speed | Slowest to learn in a short timeline |
 | Local disk only | No dependencies | Root can delete anything, so it isn't real immutability |
-| **MinIO + Object Lock** | Free, runs in Docker, same S3 API as AWS, COMPLIANCE mode refuses deletes even for root | Upstream archived and Docker Hub images withdrawn in 2026; see ADR-0004 |
+| **MinIO + Object Lock** | Free, runs in Docker, same S3 API as AWS, COMPLIANCE mode refuses deletes even for root | Community edition no longer gets new Docker images (late 2025), so we pin a release |
 | LocalStack | Emulates many AWS services | Object Lock enforcement is weaker than MinIO's |
 
 ## Consequences
